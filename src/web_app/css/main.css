@@ -172,6 +172,7 @@ label {
   transform: rotateY(180deg);
   transition: opacity 1s;
   width: 100%;
+  -webkit-filter: blur(calc(100vw * 0.018)) saturate(50%);
 }
 
 #remote-video.active {

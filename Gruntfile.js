@@ -148,6 +148,8 @@ module.exports = function(grunt) {
           'out/app_engine/js/apprtc.debug.js': [
 	    'src/web_app/js/analytics.js',
             'src/web_app/js/enums.js',
+            'src/web_app/js/webaudioextended.js',
+            'node_modules/dspjs/dsp.js',
             'src/web_app/js/adapter.js',
             'src/web_app/js/appcontroller.js',
             'src/web_app/js/call.js',

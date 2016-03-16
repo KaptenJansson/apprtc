@@ -90,7 +90,7 @@ reattachMediaStream = function(to, from) {
 if (typeof window === 'undefined' || !window.navigator) {
   webrtcUtils.log('This does not appear to be a browser');
   webrtcDetectedBrowser = 'not a browser';
-} else if (navigator.mozGetUserMedia && window.mozRTCPeerConnection) {
+} else if (navigator.mozGetUserMedia) {
   webrtcUtils.log('This appears to be Firefox');
 
   webrtcDetectedBrowser = 'firefox';
@@ -102,57 +102,53 @@ if (typeof window === 'undefined' || !window.navigator) {
   // the minimum firefox version still supported by adapter.
   webrtcMinimumVersion = 31;
 
-  // The RTCPeerConnection object.
-  window.RTCPeerConnection = function(pcConfig, pcConstraints) {
-    if (webrtcDetectedVersion < 38) {
-      // .urls is not supported in FF < 38.
-      // create RTCIceServers with a single url.
-      if (pcConfig && pcConfig.iceServers) {
-        var newIceServers = [];
-        for (var i = 0; i < pcConfig.iceServers.length; i++) {
-          var server = pcConfig.iceServers[i];
-          if (server.hasOwnProperty('urls')) {
-            for (var j = 0; j < server.urls.length; j++) {
-              var newServer = {
-                url: server.urls[j]
-              };
-              if (server.urls[j].indexOf('turn') === 0) {
-                newServer.username = server.username;
-                newServer.credential = server.credential;
+  // Shim for RTCPeerConnection on older versions.
+  if (!window.RTCPeerConnection) {
+    window.RTCPeerConnection = function(pcConfig, pcConstraints) {
+      if (webrtcDetectedVersion < 38) {
+        // .urls is not supported in FF < 38.
+        // create RTCIceServers with a single url.
+        if (pcConfig && pcConfig.iceServers) {
+          var newIceServers = [];
+          for (var i = 0; i < pcConfig.iceServers.length; i++) {
+            var server = pcConfig.iceServers[i];
+            if (server.hasOwnProperty('urls')) {
+              for (var j = 0; j < server.urls.length; j++) {
+                var newServer = {
+                  url: server.urls[j]
+                };
+                if (server.urls[j].indexOf('turn') === 0) {
+                  newServer.username = server.username;
+                  newServer.credential = server.credential;
+                }
+                newIceServers.push(newServer);
               }
-              newIceServers.push(newServer);
+            } else {
+              newIceServers.push(pcConfig.iceServers[i]);
             }
+          }
+          pcConfig.iceServers = newIceServers;
+        }
+      }
+      return new mozRTCPeerConnection(pcConfig, pcConstraints); // jscs:ignore requireCapitalizedConstructors
+    };
+    window.RTCPeerConnection.prototype = mozRTCPeerConnection.prototype;
+
+    // wrap static methods. Currently just generateCertificate.
+    if (mozRTCPeerConnection.generateCertificate) {
+      Object.defineProperty(window.RTCPeerConnection, 'generateCertificate', {
+        get: function() {
+          if (arguments.length) {
+            return mozRTCPeerConnection.generateCertificate.apply(null,
+                arguments);
           } else {
-            newIceServers.push(pcConfig.iceServers[i]);
+            return mozRTCPeerConnection.generateCertificate;
           }
         }
-        pcConfig.iceServers = newIceServers;
-      }
+      });
     }
-    return new mozRTCPeerConnection(pcConfig, pcConstraints); // jscs:ignore requireCapitalizedConstructors
-  };
 
-  // wrap static methods. Currently just generateCertificate.
-  if (mozRTCPeerConnection.generateCertificate) {
-    Object.defineProperty(window.RTCPeerConnection, 'generateCertificate', {
-      get: function() {
-        if (arguments.length) {
-          return mozRTCPeerConnection.generateCertificate.apply(null,
-              arguments);
-        } else {
-          return mozRTCPeerConnection.generateCertificate;
-        }
-      }
-    });
-  }
-
-  // The RTCSessionDescription object.
-  if (!window.RTCSessionDescription) {
     window.RTCSessionDescription = mozRTCSessionDescription;
-  }
-
-  // The RTCIceCandidate object.
-  if (!window.RTCIceCandidate) {
     window.RTCIceCandidate = mozRTCIceCandidate;
   }
 
@@ -320,6 +316,7 @@ if (typeof window === 'undefined' || !window.navigator) {
 
     return pc;
   };
+  window.RTCPeerConnection.prototype = webkitRTCPeerConnection.prototype;
 
   // wrap static methods. Currently just generateCertificate.
   if (webkitRTCPeerConnection.generateCertificate) {
@@ -522,7 +519,7 @@ if (typeof window === 'undefined' || !window.navigator) {
   // This is the build number for Edge.
   webrtcMinimumVersion = 10547;
 
-  if (RTCIceGatherer) {
+  if (window.RTCIceGatherer) {
     // Generate an alphanumeric identifier for cname or mids.
     // TODO: use UUIDs instead? https://gist.github.com/jed/982883
     var generateIdentifier = function() {
@@ -1678,6 +1675,42 @@ if (typeof window === 'undefined' || !window.navigator) {
   }
 } else {
   webrtcUtils.log('Browser does not appear to be WebRTC-capable');
+}
+
+// Polyfill ontrack on browsers that don't yet have it
+if (typeof window === 'object' && window.RTCPeerConnection && !('ontrack' in
+    window.RTCPeerConnection.prototype)) {
+  Object.defineProperty(window.RTCPeerConnection.prototype, 'ontrack', {
+    get: function() { return this._ontrack; },
+    set: function(f) {
+      var self = this;
+      if (this._ontrack) {
+        this.removeEventListener('track', this._ontrack);
+        this.removeEventListener('addstream', this._ontrackpoly);
+      }
+      this.addEventListener('track', this._ontrack = f);
+      this.addEventListener('addstream', this._ontrackpoly = function(e) {
+        if (webrtcDetectedBrowser === 'chrome') {
+          // onaddstream does not fire when a track is added to an existing stream.
+          // but stream.onaddtrack is implemented so we use thたt
+          e.stream.addEventListener('addtrack', function(te) {
+            var event = new Event('track');
+            event.track = te.track;
+            event.receiver = {track: te.track};
+            event.streams = [e.stream];
+            self.dispatchEvent(event);
+          });
+        }
+        e.stream.getTracks().forEach(function(track) {
+          var event = new Event('track');
+          event.track = track;
+          event.receiver = {track: track};
+          event.streams = [e.stream];
+          this.dispatchEvent(event);
+        }.bind(this));
+      }.bind(this));
+    }
+  });
 }
 
 // Returns the result of getUserMedia as a Promise.
