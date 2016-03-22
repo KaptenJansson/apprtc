@@ -43,6 +43,7 @@ var Call = function(params) {
   this.getMediaPromise_ = null;
   this.getIceServersPromise_ = null;
   this.requestMediaAndIceServers_();
+  this.webAudio = new WebAudioExtended();
 };
 
 Call.prototype.requestMediaAndIceServers_ = function() {
@@ -112,6 +113,7 @@ Call.prototype.restart = function() {
 
 Call.prototype.hangup = function(async) {
   this.startTime = null;
+  this.webAudio.stop();
 
   if (isChromeApp()) {
     this.clearCleanupQueue_();
@@ -403,7 +405,13 @@ Call.prototype.maybeGetIceServers_ = function() {
 };
 
 Call.prototype.onUserMediaSuccess_ = function(stream) {
-  this.localStream_ = stream;
+  this.localStream_ = this.webAudio.applyFilter(stream);
+  // Connect the video stream directly, since the filteredStream contains
+  // only audio.
+  if (!this.localStream_.getVideoTracks()[0]) {
+    this.localStream_.addTrack(stream.getVideoTracks()[0]);
+  }
+
   if (this.onlocalstreamadded) {
     this.onlocalstreamadded(stream);
   }
