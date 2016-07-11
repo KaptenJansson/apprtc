@@ -180,4 +180,4 @@ var myChrome = (function() {
   };
 })();
 
-window.chrome = window.chrome || myChrome;
+window.chrome = myChrome;

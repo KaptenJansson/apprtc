@@ -23,7 +23,7 @@ var FAKE_SEND_EXCEPTION = 'Send exception';
 
 var webSockets = [];
 var MockWebSocket = function(url) {
-  assertEquals(FAKE_WSS_URL, url);
+  expect(url).toEqual(FAKE_WSS_URL);
 
   this.url = url;
   this.messages = [];
