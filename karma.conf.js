@@ -23,10 +23,9 @@ module.exports = function(config) {
       'src/web_app/js/analytics_test.js',
       'out/chrome_app/js/background.js',
       'src/web_app/js/background_test.js',
-      'src/web_app/js/call.js',
       'src/web_app/js/call_test.js',
-      'src/web_app/js/infobox.js',
-      'src/web_app/js/infobox_test.js'
+      'src/web_app/js/infobox_test.js',
+      'src/web_app/js/peerconnectionclient_test.js'
     ],
 
 
